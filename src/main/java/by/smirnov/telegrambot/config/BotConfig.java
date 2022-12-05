@@ -7,9 +7,9 @@ import org.springframework.context.annotation.PropertySource;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 @Configuration
-@EnableScheduling
+/*@EnableScheduling*/
 @Data
-@PropertySource("application.properties")
+@PropertySource("classpath:application.properties")
 public class BotConfig {
 
     @Value("${bot.name}")
@@ -18,6 +18,6 @@ public class BotConfig {
     @Value("${bot.token}")
     String token;
 
-    @Value("${bot.owner}")
-    Long ownerId;
+/*    @Value("${bot.owner}")
+    Long ownerId;*/
 }
