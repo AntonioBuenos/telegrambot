@@ -2,6 +2,7 @@ package by.smirnov.telegrambot.config;
 
 import by.smirnov.telegrambot.service.TelegramBot;
 import lombok.RequiredArgsConstructor;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.event.ContextRefreshedEvent;
