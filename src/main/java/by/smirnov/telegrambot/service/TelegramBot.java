@@ -1,16 +1,20 @@
 package by.smirnov.telegrambot.service;
 
 import by.smirnov.telegrambot.config.BotConfig;
+import by.smirnov.telegrambot.model.User;
+import by.smirnov.telegrambot.repository.UserRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.commands.SetMyCommands;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.commands.BotCommand;
 import org.telegram.telegrambots.meta.api.objects.commands.scope.BotCommandScopeDefault;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -19,6 +23,7 @@ import java.util.List;
 public class TelegramBot extends TelegramLongPollingBot {
 
     private final BotConfig botConfig;
+    private final UserRepository userRepository;
     private List<BotCommand> listofCommands;
     private static final String HELP_TEXT = """
             This bot is created to demonstrate Spring capabilities.
@@ -30,8 +35,10 @@ public class TelegramBot extends TelegramLongPollingBot {
     private static final String START_TEXT = """
             Привет, %s, я бот! Меня создал Антон, потому что ему лень самому общаться в телеграме.
             А теперь к делу: приходи к нему на ДР! Что скажешь?)""";
-    public TelegramBot(BotConfig botConfig) {
+
+    public TelegramBot(BotConfig botConfig, UserRepository userRepository) {
         this.botConfig = botConfig;
+        this.userRepository = userRepository;
         initListOfCommands();
     }
 
@@ -53,10 +60,29 @@ public class TelegramBot extends TelegramLongPollingBot {
             long chatId = update.getMessage().getChatId();
 
             switch (messageText) {
-                case "/start" -> startCommandReceived(chatId, update.getMessage().getChat().getFirstName());
+                case "/start" -> {
+                    registerUser(update.getMessage());
+                    startCommandReceived(chatId, update.getMessage().getChat().getFirstName());
+                }
                 case "/help" -> sendMessage(chatId, HELP_TEXT);
                 default -> sendMessage(chatId, String.format(DEFAULT_TEXT, update.getMessage().getText()));
             }
+        }
+    }
+
+    private void registerUser(Message msg) {
+        if (userRepository.findById(msg.getChatId()).isEmpty()){
+            var chatId = msg.getChatId();
+            var chat = msg.getChat();
+            User user = new User();
+            user.setChatId(chatId);
+            user.setFirstName(chat.getFirstName());
+            user.setLastName(chat.getLastName());
+            user.setUserName(chat.getUserName());
+            user.setRegisteredAt(new Timestamp(System.currentTimeMillis()));
+
+            userRepository.save(user);
+            log.info("user saved: " + user);
         }
     }
 
@@ -77,7 +103,7 @@ public class TelegramBot extends TelegramLongPollingBot {
         }
     }
 
-    private void initListOfCommands(){
+    private void initListOfCommands() {
         listofCommands = new ArrayList<>();
         listofCommands.add(new BotCommand("/start", "get a welcome message"));
         listofCommands.add(new BotCommand("/mydata", "get your data stored"));
