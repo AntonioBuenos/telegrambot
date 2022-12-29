@@ -32,7 +32,7 @@ public class PersistenceProvidersConfiguration {
         Properties properties = new Properties();
 
         properties.put("hibernate.show_sql", "true");
-        properties.put("hibernate.default_schema", "tg-bot");
+        properties.put("hibernate.default_schema", "tgbot");
         properties.put("current_session_context_class", "org.springframework.orm.hibernate5.SpringSessionContext");
         return properties;
     }

@@ -1,7 +1,12 @@
 package by.smirnov.telegrambot.model;
 
+import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.ToString;
 
 import javax.persistence.Column;
 import javax.persistence.Entity;
@@ -9,10 +14,14 @@ import javax.persistence.Id;
 import javax.persistence.Table;
 import java.sql.Timestamp;
 
-@Data
+@Getter
+@Setter
+@ToString
+@EqualsAndHashCode
 @NoArgsConstructor
-@Entity(name = "users")
-@Table(schema = "tg-bot")
+@AllArgsConstructor
+@Entity
+@Table(name = "users", schema = "tgbot")
 public class User {
 
     @Id
