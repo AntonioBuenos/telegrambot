@@ -9,11 +9,14 @@ import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.commands.SetMyCommands;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.commands.BotCommand;
 import org.telegram.telegrambots.meta.api.objects.commands.scope.BotCommandScopeDefault;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
@@ -39,6 +42,9 @@ public class TelegramBot extends TelegramLongPollingBot {
             Привет, %s, я бот! Меня создал Антон, потому что ему лень самому общаться в телеграме.
             А теперь к делу: приходи к нему на ДР! Что скажешь? %s""";
     private static final String SMILE_BLUSH = ":blush:";
+    private static final String YES_BUTTON = "YES_BUTTON";
+    private static final String NO_BUTTON = "NO_BUTTON";
+    private static final String ERROR_TEXT = "Error occurred: ";
 
     public TelegramBot(BotConfig botConfig, UserRepository userRepository) {
         this.botConfig = botConfig;
@@ -69,9 +75,53 @@ public class TelegramBot extends TelegramLongPollingBot {
                     startCommandReceived(chatId, update.getMessage().getChat().getFirstName());
                 }
                 case "/help" -> sendMessage(chatId, HELP_TEXT);
+                case "/register" -> register(chatId);
                 default -> sendMessage(chatId, String.format(DEFAULT_TEXT, update.getMessage().getText()));
             }
+        } else if (update.hasCallbackQuery()) {
+            //для случаев, когда в апдейте имеется объект CallbackQuery (от кнопок илайн-клавиатуры)
+            String callbackData = update.getCallbackQuery().getData(); //получаем данные из CallbackQuery
+            Message message = update.getCallbackQuery().getMessage(); //самого сообщения в апдейте нет, оно внутри CallbackQuery
+            long messageId = message.getMessageId(); //получаем ID сообщения
+            long chatId = message.getChatId(); //получаем ID чата
+
+            if (callbackData.equals(YES_BUTTON)) { //проверяем соответствие конкретных данных, полученных отнажатия кнопки
+                String text = "You pressed YES button"; //новый текст, который заменит прежний текст сообщения
+                executeEditMessageText(text, chatId, messageId); //метод изменения сообщения: новый текст заменит старый
+            } else if (callbackData.equals(NO_BUTTON)) {
+                String text = "You pressed NO button";
+                executeEditMessageText(text, chatId, messageId);
+            }
         }
+    }
+
+    private void register(long chatId) {
+
+        SendMessage message = new SendMessage(); //создаем объект отправки сообщений
+        message.setChatId(String.valueOf(chatId)); //определяем ID чата
+        message.setText("Do you really want to register?"); //и сообщение к отправке
+
+        InlineKeyboardMarkup keybdMarkup = new InlineKeyboardMarkup(); //создаем объект клавиатуры, принадлежащий сообщению
+        List<List<InlineKeyboardButton>> keybd = new ArrayList<>(); //аргумент клавиатуры требует списка списков кнопок
+        List<InlineKeyboardButton> buttonsRow = new ArrayList<>(); //создаем список для кнопок (ряд кнопок)
+
+        var yesButton = new InlineKeyboardButton(); //создаем кнопку
+        yesButton.setText("Yes"); //надпись на кнопке
+        yesButton.setCallbackData(YES_BUTTON); //значение, которое будет возвращать кнопка при нажатии
+
+        var noButton = new InlineKeyboardButton();
+        noButton.setText("No");
+        noButton.setCallbackData(NO_BUTTON);
+
+        buttonsRow.add(yesButton); //добавляем кнопки в ряд (список кнопок)
+        buttonsRow.add(noButton);
+
+        keybd.add(buttonsRow); //добавляем ряд кнопок в клавиатуру
+
+        keybdMarkup.setKeyboard(keybd); //передаем сформированную клавиатуру в объект клавиатуры сообщения
+        message.setReplyMarkup(keybdMarkup); //устанавливаем сообщению объект его клавиатуры
+
+        executeMessage(message); //в отдельном методе исполняется отправка сообщения с обработкой исключений
     }
 
     private void registerUser(Message msg) {
@@ -146,5 +196,26 @@ public class TelegramBot extends TelegramLongPollingBot {
         keyboardMarkup.setKeyboard(keyboardRows); //список с рядами передаем в объект клавиатуры
 
         return keyboardMarkup;
+    }
+
+    private void executeEditMessageText(String text, long chatId, long messageId) {
+        EditMessageText message = new EditMessageText(); //объект измененного текста сообщения
+        message.setChatId(String.valueOf(chatId)); //устанавливаем сообщению ID чата
+        message.setText(text); //и новый текст
+        message.setMessageId((int) messageId); //и ID сообщения
+
+        try {
+            execute(message); //исполнение изменения сообщения
+        } catch (TelegramApiException e) {
+            log.error(ERROR_TEXT + e.getMessage());
+        }
+    }
+
+    private void executeMessage(SendMessage message) {
+        try {
+            execute(message);
+        } catch (TelegramApiException e) {
+            log.error(ERROR_TEXT + e.getMessage());
+        }
     }
 }
