@@ -3,6 +3,7 @@ package by.smirnov.telegrambot.service;
 import by.smirnov.telegrambot.config.BotConfig;
 import by.smirnov.telegrambot.model.User;
 import by.smirnov.telegrambot.repository.UserRepository;
+import com.vdurmont.emoji.EmojiParser;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
@@ -34,7 +35,8 @@ public class TelegramBot extends TelegramLongPollingBot {
     private static final String DEFAULT_TEXT = "Все говорят \"%s\", а ты возьми и приди! еще и подарок принеси!))";
     private static final String START_TEXT = """
             Привет, %s, я бот! Меня создал Антон, потому что ему лень самому общаться в телеграме.
-            А теперь к делу: приходи к нему на ДР! Что скажешь?)""";
+            А теперь к делу: приходи к нему на ДР! Что скажешь? %s""";
+    private static final String SMILE_BLUSH = ":blush:";
 
     public TelegramBot(BotConfig botConfig, UserRepository userRepository) {
         this.botConfig = botConfig;
@@ -87,7 +89,10 @@ public class TelegramBot extends TelegramLongPollingBot {
     }
 
     private void startCommandReceived(long chatId, String name) {
-        String answer = String.format(START_TEXT, name);
+        //Способ вставки эмодзи через библиотеку emoji-java.
+        // Shortcodes можно смотреть, например, здесь: https://emojipedia.org/
+        String answer = EmojiParser.parseToUnicode(String.format(START_TEXT, name, SMILE_BLUSH));
+
         log.info("Replied to user " + name);
         sendMessage(chatId, answer);
     }
