@@ -104,29 +104,7 @@ public class TelegramBot extends TelegramLongPollingBot {
         message.setChatId(chatId);
         message.setText(textToSend);
 
-        //Объект класса клавиатуры вариантов ответов
-        ReplyKeyboardMarkup keyboardMarkup = new ReplyKeyboardMarkup();
-
-        List<KeyboardRow> keyboardRows = new ArrayList<>(); //создаем список рядов кнопок
-
-        KeyboardRow row = new KeyboardRow(); //создаем ряд с кнопками
-
-        row.add("weather"); //заполняем ряд конкретными кнопками, передаваемое значение - надпись на кнопке + ответ,
-        row.add("get random joke"); //который будет выдан при нажатии
-
-        keyboardRows.add(row); //добавляем ряд в клавиатуру
-
-        row = new KeyboardRow(); //создаем еще один ряд
-
-        row.add("register"); //добавляем еще кнопки
-        row.add("check my data");
-        row.add("delete my data");
-
-        keyboardRows.add(row); //добавляем ряд в клавиатуру
-
-        keyboardMarkup.setKeyboard(keyboardRows); //список с рядами передаем в объект клавиатуры
-
-        message.setReplyMarkup(keyboardMarkup); //передаем объект клавиатуры в сообщение
+        message.setReplyMarkup(getReplyKeys()); //передаем объект клавиатуры в сообщение
 
         try {
             execute(message); //отправляем сообщение
@@ -147,5 +125,26 @@ public class TelegramBot extends TelegramLongPollingBot {
         } catch (TelegramApiException e) {
             log.error("Error setting bot's command list: " + e.getMessage());
         }
+    }
+
+    private ReplyKeyboardMarkup getReplyKeys() {
+
+        ReplyKeyboardMarkup keyboardMarkup = new ReplyKeyboardMarkup(); //Объект класса клавиатуры вариантов ответов
+        List<KeyboardRow> keyboardRows = new ArrayList<>(); //создаем список рядов кнопок
+
+        KeyboardRow row = new KeyboardRow(); //создаем ряд с кнопками
+        row.add("weather"); //заполняем ряд конкретными кнопками, передаваемое значение - надпись на кнопке + ответ,
+        row.add("get random joke"); //который будет выдан при нажатии
+        keyboardRows.add(row); //добавляем ряд в клавиатуру
+
+        row = new KeyboardRow(); //создаем еще один ряд
+        row.add("register"); //добавляем еще кнопки
+        row.add("check my data");
+        row.add("delete my data");
+        keyboardRows.add(row); //добавляем ряд в клавиатуру
+
+        keyboardMarkup.setKeyboard(keyboardRows); //список с рядами передаем в объект клавиатуры
+
+        return keyboardMarkup;
     }
 }
