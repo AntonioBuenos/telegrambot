@@ -49,7 +49,7 @@ public class TelegramBot extends TelegramLongPollingBot {
     public TelegramBot(BotConfig botConfig, UserRepository userRepository) {
         this.botConfig = botConfig;
         this.userRepository = userRepository;
-        initListOfCommands();
+        initListOfCommands(); //инициализируем список команд
     }
 
     @Override
@@ -74,19 +74,20 @@ public class TelegramBot extends TelegramLongPollingBot {
                 String textToSend = EmojiParser.parseToUnicode(messageText.substring(messageText.indexOf(" ")));
                 //парсим: отделяем сообщение от ключевого слова
                 for (User user : userRepository.findAll()) { //проходимся по списку всех пользователей из БД
-                    prepareAndSendMessage(user.getChatId(), textToSend); //каждому отправляем сообщение рассылки
+                    sendMessage(user.getChatId(), textToSend); //каждому отправляем сообщение рассылки
+                }
+            } else {
+                switch (messageText) {
+                    case "/start" -> {
+                        registerUser(update.getMessage());
+                        startCommandReceived(chatId, update.getMessage().getChat().getFirstName());
+                    }
+                    case "/help" -> sendMessage(chatId, HELP_TEXT);
+                    case "/register" -> register(chatId);
+                    default -> sendMessage(chatId, String.format(DEFAULT_TEXT, update.getMessage().getText()));
                 }
             }
 
-            switch (messageText) {
-                case "/start" -> {
-                    registerUser(update.getMessage());
-                    startCommandReceived(chatId, update.getMessage().getChat().getFirstName());
-                }
-                case "/help" -> sendMessage(chatId, HELP_TEXT);
-                case "/register" -> register(chatId);
-                default -> sendMessage(chatId, String.format(DEFAULT_TEXT, update.getMessage().getText()));
-            }
         } else if (update.hasCallbackQuery()) {
             //для случаев, когда в апдейте имеется объект CallbackQuery (от кнопок илайн-клавиатуры)
             String callbackData = update.getCallbackQuery().getData(); //получаем данные из CallbackQuery
@@ -102,13 +103,6 @@ public class TelegramBot extends TelegramLongPollingBot {
                 executeEditMessageText(text, chatId, messageId);
             }
         }
-    }
-
-    private void prepareAndSendMessage(long chatId, String textToSend){ //метод отправки сообщений
-        SendMessage message = new SendMessage();
-        message.setChatId(String.valueOf(chatId));
-        message.setText(textToSend);
-        executeMessage(message);
     }
 
     private void register(long chatId) {
@@ -162,25 +156,27 @@ public class TelegramBot extends TelegramLongPollingBot {
         String answer = EmojiParser.parseToUnicode(String.format(START_TEXT, name, SMILE_BLUSH));
 
         log.info("Replied to user " + name);
-        sendMessage(chatId, answer);
+        sendMsgWithReplyKbd(chatId, answer);
     }
 
     private void sendMessage(long chatId, String textToSend) {
         SendMessage message = new SendMessage();
         message.setChatId(chatId);
         message.setText(textToSend);
-
-        message.setReplyMarkup(getReplyKeys()); //передаем объект клавиатуры в сообщение
-
-        try {
-            execute(message); //отправляем сообщение
-        } catch (TelegramApiException e) {
-            log.error("Error occured: " + e.getMessage());
-        }
+        executeMessage(message);
     }
 
-    private void initListOfCommands() {
-        listofCommands = new ArrayList<>();
+    private void sendMsgWithReplyKbd(long chatId, String textToSend) {
+        SendMessage message = new SendMessage();
+        message.setChatId(chatId);
+        message.setText(textToSend);
+        message.setReplyMarkup(getReplyKeys()); //передаем объект клавиатуры в сообщение
+
+        executeMessage(message);
+    }
+
+    private void initListOfCommands() { //инициализируем список команд
+        listofCommands = new ArrayList<>(); //создаем список и добавляем новые команды
         listofCommands.add(new BotCommand("/start", "get a welcome message"));
         listofCommands.add(new BotCommand("/mydata", "get your data stored"));
         listofCommands.add(new BotCommand("/register", "registration"));
@@ -189,6 +185,7 @@ public class TelegramBot extends TelegramLongPollingBot {
         listofCommands.add(new BotCommand("/settings", "set your preferences"));
         try {
             this.execute(new SetMyCommands(listofCommands, new BotCommandScopeDefault(), null));
+            //выполняется добавление списка команд
         } catch (TelegramApiException e) {
             log.error("Error setting bot's command list: " + e.getMessage());
         }
