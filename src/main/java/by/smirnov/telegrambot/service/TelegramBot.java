@@ -69,6 +69,15 @@ public class TelegramBot extends TelegramLongPollingBot {
             log.info(update.getMessage().getChat().getFirstName() + " sent message: " + messageText);
             long chatId = update.getMessage().getChatId();
 
+            if(messageText.contains("/send") && botConfig.getOwnerId() == chatId) {
+                //проверяем ключевое слово и владельца бота. Владелец отправит сообщение боту, а бот разошлет всем юзерам
+                String textToSend = EmojiParser.parseToUnicode(messageText.substring(messageText.indexOf(" ")));
+                //парсим: отделяем сообщение от ключевого слова
+                for (User user : userRepository.findAll()) { //проходимся по списку всех пользователей из БД
+                    prepareAndSendMessage(user.getChatId(), textToSend); //каждому отправляем сообщение рассылки
+                }
+            }
+
             switch (messageText) {
                 case "/start" -> {
                     registerUser(update.getMessage());
@@ -93,6 +102,13 @@ public class TelegramBot extends TelegramLongPollingBot {
                 executeEditMessageText(text, chatId, messageId);
             }
         }
+    }
+
+    private void prepareAndSendMessage(long chatId, String textToSend){ //метод отправки сообщений
+        SendMessage message = new SendMessage();
+        message.setChatId(String.valueOf(chatId));
+        message.setText(textToSend);
+        executeMessage(message);
     }
 
     private void register(long chatId) {
@@ -167,6 +183,7 @@ public class TelegramBot extends TelegramLongPollingBot {
         listofCommands = new ArrayList<>();
         listofCommands.add(new BotCommand("/start", "get a welcome message"));
         listofCommands.add(new BotCommand("/mydata", "get your data stored"));
+        listofCommands.add(new BotCommand("/register", "registration"));
         listofCommands.add(new BotCommand("/deletedata", "delete my data"));
         listofCommands.add(new BotCommand("/help", "info how to use this bot"));
         listofCommands.add(new BotCommand("/settings", "set your preferences"));
