@@ -4,7 +4,6 @@ import by.smirnov.telegrambot.config.BotConfig;
 import by.smirnov.telegrambot.model.Ads;
 import by.smirnov.telegrambot.model.User;
 import by.smirnov.telegrambot.repository.AdsRepository;
-import by.smirnov.telegrambot.repository.UserRepository;
 import com.vdurmont.emoji.EmojiParser;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -23,36 +22,38 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKe
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
-import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
+
+import static by.smirnov.telegrambot.constants.BotConstants.COMMAND_DELETE_DATA;
+import static by.smirnov.telegrambot.constants.BotConstants.COMMAND_HELP;
+import static by.smirnov.telegrambot.constants.BotConstants.COMMAND_MY_DATA;
+import static by.smirnov.telegrambot.constants.BotConstants.COMMAND_REGISTER;
+import static by.smirnov.telegrambot.constants.BotConstants.COMMAND_SEND;
+import static by.smirnov.telegrambot.constants.BotConstants.COMMAND_SETTINGS;
+import static by.smirnov.telegrambot.constants.BotConstants.COMMAND_START;
+import static by.smirnov.telegrambot.constants.BotConstants.DEFAULT_TEXT;
+import static by.smirnov.telegrambot.constants.BotConstants.ERROR;
+import static by.smirnov.telegrambot.constants.BotConstants.ERROR_COMMAND_LIST;
+import static by.smirnov.telegrambot.constants.BotConstants.HELP_TEXT;
+import static by.smirnov.telegrambot.constants.BotConstants.LOG_REPLIED;
+import static by.smirnov.telegrambot.constants.BotConstants.NO_BUTTON;
+import static by.smirnov.telegrambot.constants.BotConstants.SMILE_BLUSH;
+import static by.smirnov.telegrambot.constants.BotConstants.START_TEXT;
+import static by.smirnov.telegrambot.constants.BotConstants.YES_BUTTON;
 
 @Component
 @Slf4j
 public class TelegramBot extends TelegramLongPollingBot {
 
     private final BotConfig botConfig;
-    private final UserRepository userRepository;
+    private final UserService userService;
     private final AdsRepository adsRepository;
     private List<BotCommand> listofCommands;
-    private static final String HELP_TEXT = """
-            This bot is created to demonstrate Spring capabilities.
-            You can execute commands from the main menu on the left or by typing a command:
-            Type /start to see a welcome message
-            Type /mydata to see data stored about yourself
-            Type /help to see this message again""";
-    private static final String DEFAULT_TEXT = "Все говорят \"%s\", а ты возьми и приди! еще и подарок принеси!))";
-    private static final String START_TEXT = """
-            Привет, %s, я бот! Меня создал Антон, потому что ему лень самому общаться в телеграме.
-            А теперь к делу: приходи к нему на ДР! Что скажешь? %s""";
-    private static final String SMILE_BLUSH = ":blush:";
-    private static final String YES_BUTTON = "YES_BUTTON";
-    private static final String NO_BUTTON = "NO_BUTTON";
-    private static final String ERROR_TEXT = "Error occurred: ";
 
-    public TelegramBot(BotConfig botConfig, UserRepository userRepository, AdsRepository adsRepository) {
+    public TelegramBot(BotConfig botConfig, UserService userService, AdsRepository adsRepository) {
         this.botConfig = botConfig;
-        this.userRepository = userRepository;
+        this.userService = userService;
         this.adsRepository = adsRepository;
         initListOfCommands(); //инициализируем список команд
     }
@@ -70,43 +71,47 @@ public class TelegramBot extends TelegramLongPollingBot {
     @Override
     public void onUpdateReceived(Update update) {
         if (update.hasMessage() && update.getMessage().hasText()) {
-            String messageText = update.getMessage().getText();
-            log.info(update.getMessage().getChat().getFirstName() + " sent message: " + messageText);
-            long chatId = update.getMessage().getChatId();
-
-            if (messageText.contains("/send") && botConfig.getOwnerId() == chatId) {
-                //проверяем ключевое слово и владельца бота. Владелец отправит сообщение боту, а бот разошлет всем юзерам
-                String textToSend = EmojiParser.parseToUnicode(messageText.substring(messageText.indexOf(" ")));
-                //парсим: отделяем сообщение от ключевого слова
-                for (User user : userRepository.findAll()) { //проходимся по списку всех пользователей из БД
-                    sendMessage(user.getChatId(), textToSend); //каждому отправляем сообщение рассылки
-                }
-            } else {
-                switch (messageText) {
-                    case "/start" -> {
-                        registerUser(update.getMessage());
-                        startCommandReceived(chatId, update.getMessage().getChat().getFirstName());
-                    }
-                    case "/help" -> sendMessage(chatId, HELP_TEXT);
-                    case "/register" -> register(chatId);
-                    default -> sendMessage(chatId, String.format(DEFAULT_TEXT, update.getMessage().getText()));
-                }
-            }
-
+            handleMessage(update);
         } else if (update.hasCallbackQuery()) {
-            //для случаев, когда в апдейте имеется объект CallbackQuery (от кнопок илайн-клавиатуры)
-            String callbackData = update.getCallbackQuery().getData(); //получаем данные из CallbackQuery
-            Message message = update.getCallbackQuery().getMessage(); //самого сообщения в апдейте нет, оно внутри CallbackQuery
-            long messageId = message.getMessageId(); //получаем ID сообщения
-            long chatId = message.getChatId(); //получаем ID чата
+            handleCallBackQuery(update); //когда в апдейте - ответ от кнопок инлайн-клавиатуры
+        }
+    }
 
-            if (callbackData.equals(YES_BUTTON)) { //проверяем соответствие конкретных данных, полученных отнажатия кнопки
-                String text = "You pressed YES button"; //новый текст, который заменит прежний текст сообщения
-                executeEditMessageText(text, chatId, messageId); //метод изменения сообщения: новый текст заменит старый
-            } else if (callbackData.equals(NO_BUTTON)) {
-                String text = "You pressed NO button";
-                executeEditMessageText(text, chatId, messageId);
+    private void handleMessage(Update update){
+        Message message = update.getMessage();
+        String messageText = message.getText();
+        log.info("{} sent message: {}", message.getChat().getUserName(), messageText);
+        long chatId = message.getChatId();
+
+        if (messageText.contains(COMMAND_SEND) && botConfig.getOwnerId() == chatId) {
+            //проверяем ключевое слово и владельца бота. Владелец отправит сообщение боту, а бот разошлет всем юзерам
+            String textToSend = EmojiParser.parseToUnicode(messageText.substring(messageText.indexOf(" ")));
+            //парсим: отделяем сообщение от ключевого слова
+            for (User user : userService.findAll()) { //проходимся по списку всех пользователей из БД
+                sendMessage(user.getChatId(), textToSend); //каждому отправляем сообщение рассылки
             }
+        } else {
+            switch (messageText) {
+                case COMMAND_START -> startCommandReceived(chatId, message);
+                case COMMAND_HELP -> sendMessage(chatId, HELP_TEXT);
+                case COMMAND_REGISTER -> register(chatId);
+                default -> sendMessage(chatId, String.format(DEFAULT_TEXT, messageText));
+            }
+        }
+    }
+
+    private void handleCallBackQuery(Update update){
+        String callbackData = update.getCallbackQuery().getData(); //получаем данные из CallbackQuery
+        Message message = update.getCallbackQuery().getMessage(); //самого сообщения в апдейте нет, оно внутри CallbackQuery
+        long messageId = message.getMessageId(); //получаем ID сообщения
+        long chatId = message.getChatId(); //получаем ID чата
+
+        if (callbackData.equals(YES_BUTTON)) { //проверяем соответствие конкретных данных, полученных отнажатия кнопки
+            String text = "You pressed YES button"; //новый текст, который заменит прежний текст сообщения
+            executeEditMessageText(text, chatId, messageId); //метод изменения сообщения: новый текст заменит старый
+        } else if (callbackData.equals(NO_BUTTON)) {
+            String text = "You pressed NO button";
+            executeEditMessageText(text, chatId, messageId);
         }
     }
 
@@ -139,28 +144,14 @@ public class TelegramBot extends TelegramLongPollingBot {
         executeMessage(message); //в отдельном методе исполняется отправка сообщения с обработкой исключений
     }
 
-    private void registerUser(Message msg) {
-        if (userRepository.findById(msg.getChatId()).isEmpty()) {
-            var chatId = msg.getChatId();
-            var chat = msg.getChat();
-            User user = new User();
-            user.setChatId(chatId);
-            user.setFirstName(chat.getFirstName());
-            user.setLastName(chat.getLastName());
-            user.setUserName(chat.getUserName());
-            user.setRegisteredAt(new Timestamp(System.currentTimeMillis()));
-
-            userRepository.save(user);
-            log.info("user saved: " + user);
-        }
-    }
-
-    private void startCommandReceived(long chatId, String name) {
+    private void startCommandReceived(long chatId, Message message) {
+        userService.registerUser(message);
+        String name = message.getChat().getFirstName();
         //Способ вставки эмодзи через библиотеку emoji-java.
         // Shortcodes можно смотреть, например, здесь: https://emojipedia.org/
         String answer = EmojiParser.parseToUnicode(String.format(START_TEXT, name, SMILE_BLUSH));
 
-        log.info("Replied to user " + name);
+        log.info(LOG_REPLIED, message.getChat().getUserName());
         sendMsgWithReplyKbd(chatId, answer);
     }
 
@@ -182,17 +173,17 @@ public class TelegramBot extends TelegramLongPollingBot {
 
     private void initListOfCommands() { //инициализируем список команд
         listofCommands = new ArrayList<>(); //создаем список и добавляем новые команды
-        listofCommands.add(new BotCommand("/start", "get a welcome message"));
-        listofCommands.add(new BotCommand("/mydata", "get your data stored"));
-        listofCommands.add(new BotCommand("/register", "registration"));
-        listofCommands.add(new BotCommand("/deletedata", "delete my data"));
-        listofCommands.add(new BotCommand("/help", "info how to use this bot"));
-        listofCommands.add(new BotCommand("/settings", "set your preferences"));
+        listofCommands.add(new BotCommand(COMMAND_START, "get a welcome message"));
+        listofCommands.add(new BotCommand(COMMAND_MY_DATA, "get your data stored"));
+        listofCommands.add(new BotCommand(COMMAND_REGISTER, "registration"));
+        listofCommands.add(new BotCommand(COMMAND_DELETE_DATA, "delete my data"));
+        listofCommands.add(new BotCommand(COMMAND_HELP, "info how to use this bot"));
+        listofCommands.add(new BotCommand(COMMAND_SETTINGS, "set your preferences"));
         try {
             this.execute(new SetMyCommands(listofCommands, new BotCommandScopeDefault(), null));
             //выполняется добавление списка команд
         } catch (TelegramApiException e) {
-            log.error("Error setting bot's command list: " + e.getMessage());
+            log.error(ERROR_COMMAND_LIST, e.getMessage());
         }
     }
 
@@ -226,7 +217,7 @@ public class TelegramBot extends TelegramLongPollingBot {
         try {
             execute(message); //исполнение изменения сообщения
         } catch (TelegramApiException e) {
-            log.error(ERROR_TEXT + e.getMessage());
+            log.error(ERROR, e.getMessage());
         }
     }
 
@@ -234,7 +225,7 @@ public class TelegramBot extends TelegramLongPollingBot {
         try {
             execute(message);
         } catch (TelegramApiException e) {
-            log.error(ERROR_TEXT + e.getMessage());
+            log.error(ERROR, e.getMessage());
         }
     }
 
@@ -243,7 +234,7 @@ public class TelegramBot extends TelegramLongPollingBot {
     private void sendAds() {
 
         for (Ads ad : adsRepository.findAll()) { //каждое объявление из БД
-            for (User user : userRepository.findAll()) { //каждому пользователю
+            for (User user : userService.findAll()) { //каждому пользователю
                 sendMessage(user.getChatId(), ad.getAd()); //отправляем
             }
         }
