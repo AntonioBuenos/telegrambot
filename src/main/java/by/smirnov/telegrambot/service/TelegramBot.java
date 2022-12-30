@@ -1,10 +1,13 @@
 package by.smirnov.telegrambot.service;
 
 import by.smirnov.telegrambot.config.BotConfig;
+import by.smirnov.telegrambot.model.Ads;
 import by.smirnov.telegrambot.model.User;
+import by.smirnov.telegrambot.repository.AdsRepository;
 import by.smirnov.telegrambot.repository.UserRepository;
 import com.vdurmont.emoji.EmojiParser;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.commands.SetMyCommands;
@@ -30,6 +33,7 @@ public class TelegramBot extends TelegramLongPollingBot {
 
     private final BotConfig botConfig;
     private final UserRepository userRepository;
+    private final AdsRepository adsRepository;
     private List<BotCommand> listofCommands;
     private static final String HELP_TEXT = """
             This bot is created to demonstrate Spring capabilities.
@@ -46,9 +50,10 @@ public class TelegramBot extends TelegramLongPollingBot {
     private static final String NO_BUTTON = "NO_BUTTON";
     private static final String ERROR_TEXT = "Error occurred: ";
 
-    public TelegramBot(BotConfig botConfig, UserRepository userRepository) {
+    public TelegramBot(BotConfig botConfig, UserRepository userRepository, AdsRepository adsRepository) {
         this.botConfig = botConfig;
         this.userRepository = userRepository;
+        this.adsRepository = adsRepository;
         initListOfCommands(); //инициализируем список команд
     }
 
@@ -69,7 +74,7 @@ public class TelegramBot extends TelegramLongPollingBot {
             log.info(update.getMessage().getChat().getFirstName() + " sent message: " + messageText);
             long chatId = update.getMessage().getChatId();
 
-            if(messageText.contains("/send") && botConfig.getOwnerId() == chatId) {
+            if (messageText.contains("/send") && botConfig.getOwnerId() == chatId) {
                 //проверяем ключевое слово и владельца бота. Владелец отправит сообщение боту, а бот разошлет всем юзерам
                 String textToSend = EmojiParser.parseToUnicode(messageText.substring(messageText.indexOf(" ")));
                 //парсим: отделяем сообщение от ключевого слова
@@ -231,5 +236,17 @@ public class TelegramBot extends TelegramLongPollingBot {
         } catch (TelegramApiException e) {
             log.error(ERROR_TEXT + e.getMessage());
         }
+    }
+
+    @Scheduled(cron = "${cron.scheduler}") //определяем, что будет автоматическое выполнение метода по расписанию
+    // + определяем метод
+    private void sendAds() {
+
+        for (Ads ad : adsRepository.findAll()) { //каждое объявление из БД
+            for (User user : userRepository.findAll()) { //каждому пользователю
+                sendMessage(user.getChatId(), ad.getAd()); //отправляем
+            }
+        }
+
     }
 }
